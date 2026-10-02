@@ -26,16 +26,17 @@ jobs:
           unzip -q gradle-8.2-bin.zip
           echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
 
-      - name: Verify Gradle
-        run: gradle --version
-
-      - name: Scaffold project
+      - name: Wipe everything
         run: |
-          rm -rf app build.gradle settings.gradle gradle.properties
+          rm -rf app build.gradle settings.gradle gradle.properties gradlew gradlew.bat gradle .gradle build
+          ls -la
+
+      - name: Scaffold
+        run: |
           mkdir -p app/src/main/java/com/example/shtile
-          mkdir -p app/src/main/res/drawable
-          mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/drawable
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -73,10 +74,9 @@ jobs:
                   applicationId "com.example.shtile"
                   minSdk 24
                   targetSdk 34
-                  versionCode 3
-                  versionName "3.0"
+                  versionCode 4
+                  versionName "4.0"
               }
-              buildTypes { release { minifyEnabled false } }
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
@@ -85,7 +85,6 @@ jobs:
           }
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
           }
           EOF
 
@@ -95,7 +94,7 @@ jobs:
               <application
                   android:allowBackup="true"
                   android:label="Settings"
-                  android:theme="@style/Theme.Settings">
+                  android:theme="@style/Theme.AppCompat.NoActionBar">
 
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
@@ -103,10 +102,6 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
                   </activity>
-
-                  <receiver
-                      android:name=".RunnerReceiver"
-                      android:exported="false"/>
 
                   <service
                       android:name=".SafeTileService"
@@ -148,66 +143,37 @@ jobs:
           import android.widget.Toast
 
           object Runner {
-
-              fun runNormal(context: Context, onDone: ((Int) -> Unit)? = null) {
+              fun runNormal(context: Context) {
                   Thread {
                       val code = try {
-                          val cmd = "cd /data/local/tmp && ./.ixl"
-                          val p = ProcessBuilder("su", "-c", cmd)
+                          val p = ProcessBuilder("su", "-c", "cd /data/local/tmp && ./.ixl")
                               .redirectErrorStream(true).start()
                           p.inputStream.close()
                           p.waitFor()
-                      } catch (e: Exception) {
-                          -1
-                      }
+                      } catch (e: Exception) { -1 }
                       Handler(Looper.getMainLooper()).post {
-                          Toast.makeText(
-                              context,
+                          Toast.makeText(context,
                               if (code == 0) "Normal Done" else "Normal Exit $code",
-                              Toast.LENGTH_SHORT
-                          ).show()
-                          onDone?.invoke(code)
+                              Toast.LENGTH_SHORT).show()
                       }
                   }.start()
               }
 
-              fun runBrutal(context: Context, onDone: ((Int) -> Unit)? = null) {
+              fun runBrutal(context: Context) {
                   Thread {
                       val code = try {
-                          val cmd = "cd /data/local/tmp && (echo 2; sleep 4; echo 7; sleep 2) | ./Gucci_brutal >/dev/null 2>&1"
-                          val p = ProcessBuilder("su", "-c", cmd)
+                          val p = ProcessBuilder("su", "-c",
+                              "cd /data/local/tmp && (echo 2; sleep 4; echo 7; sleep 2) | ./Gucci_brutal")
                               .redirectErrorStream(true).start()
                           p.inputStream.close()
                           p.waitFor()
-                      } catch (e: Exception) {
-                          -1
-                      }
+                      } catch (e: Exception) { -1 }
                       Handler(Looper.getMainLooper()).post {
-                          Toast.makeText(
-                              context,
+                          Toast.makeText(context,
                               if (code == 0) "Brutal Done" else "Brutal Exit $code",
-                              Toast.LENGTH_SHORT
-                          ).show()
-                          onDone?.invoke(code)
+                              Toast.LENGTH_SHORT).show()
                       }
                   }.start()
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/example/shtile/RunnerReceiver.kt <<'EOF'
-          package com.example.shtile
-
-          import android.content.BroadcastReceiver
-          import android.content.Context
-          import android.content.Intent
-
-          class RunnerReceiver : BroadcastReceiver() {
-              override fun onReceive(context: Context, intent: Intent) {
-                  when (intent.action) {
-                      "com.example.shtile.RUN_NORMAL" -> Runner.runNormal(context)
-                      "com.example.shtile.RUN_BRUTAL" -> Runner.runBrutal(context)
-                  }
               }
           }
           EOF
@@ -215,14 +181,10 @@ jobs:
           cat > app/src/main/java/com/example/shtile/SafeTileService.kt <<'EOF'
           package com.example.shtile
 
-          import android.content.Intent
-          import android.os.Handler
-          import android.os.Looper
           import android.service.quicksettings.Tile
           import android.service.quicksettings.TileService
 
           class SafeTileService : TileService() {
-
               override fun onStartListening() {
                   super.onStartListening()
                   qsTile?.apply {
@@ -231,21 +193,9 @@ jobs:
                       updateTile()
                   }
               }
-
               override fun onClick() {
                   super.onClick()
-                  qsTile?.state = Tile.STATE_ACTIVE
-                  qsTile?.updateTile()
-
-                  val i = Intent(this, RunnerReceiver::class.java).apply {
-                      action = "com.example.shtile.RUN_NORMAL"
-                  }
-                  sendBroadcast(i)
-
-                  Handler(Looper.getMainLooper()).postDelayed({
-                      qsTile?.state = Tile.STATE_INACTIVE
-                      qsTile?.updateTile()
-                  }, 1500)
+                  Runner.runNormal(this)
               }
           }
           EOF
@@ -253,14 +203,10 @@ jobs:
           cat > app/src/main/java/com/example/shtile/BrutalTileService.kt <<'EOF'
           package com.example.shtile
 
-          import android.content.Intent
-          import android.os.Handler
-          import android.os.Looper
           import android.service.quicksettings.Tile
           import android.service.quicksettings.TileService
 
           class BrutalTileService : TileService() {
-
               override fun onStartListening() {
                   super.onStartListening()
                   qsTile?.apply {
@@ -269,10 +215,90 @@ jobs:
                       updateTile()
                   }
               }
-
               override fun onClick() {
                   super.onClick()
-                  qsTile?.state = Tile.STATE_ACTIVE
+                  Runner.runBrutal(this)
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/example/shtile/MainActivity.kt <<'EOF'
+          package com.example.shtile
+
+          import android.os.Bundle
+          import android.widget.Button
+          import androidx.appcompat.app.AppCompatActivity
+
+          class MainActivity : AppCompatActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  findViewById<Button>(R.id.testSafeBtn).setOnClickListener {
+                      Runner.runNormal(this)
+                  }
+                  findViewById<Button>(R.id.testBrutalBtn).setOnClickListener {
+                      Runner.runBrutal(this)
+                  }
+              }
+          }
+          EOF
+
+          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:orientation="vertical"
+              android:padding="24dp"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+              <Button android:id="@+id/testSafeBtn"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Gucci Normal"/>
+
+              <Button android:id="@+id/testBrutalBtn"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="8dp"
+                  android:text="Gucci Brutal"/>
+          </LinearLayout>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_tile_normal.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp" android:height="24dp"
+              android:viewportWidth="24" android:viewportHeight="24">
+              <path android:fillColor="#FFFFFFFF"
+                  android:pathData="M12,2L4,5v6c0,5.55 3.84,10.74 8,12 4.16,-1.26 8,-6.45 8,-12V5l-8,-3z"/>
+          </vector>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_tile_brutal.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp" android:height="24dp"
+              android:viewportWidth="24" android:viewportHeight="24">
+              <path android:fillColor="#FFFFFFFF"
+                  android:pathData="M7,2v11h3v9l7,-12h-4l4,-8z"/>
+          </vector>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources><string name="app_name">Settings</string></resources>
+          EOF
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Check APK
+        run: ls -la app/build/outputs/apk/debug/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Settings-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: errorSTATE_ACTIVE
                   qsTile?.updateTile()
 
                   val i = Intent(this, RunnerReceiver::class.java).apply {
